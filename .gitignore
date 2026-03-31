@@ -46,6 +46,9 @@ local.properties
 Thumbs.db
 
 # Logs
+
+# Ignore specific config files
+auth-module/src/main/resources/application.yml
 logs/
 *.log
 
