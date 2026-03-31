@@ -1,0 +1,9 @@
+CREATE TABLE notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    recipient VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type ENUM('EMAIL', 'SMS', 'PUSH') NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    sent_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

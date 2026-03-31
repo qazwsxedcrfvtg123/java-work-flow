@@ -1,0 +1,112 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jenkins-agent-${JOB_NAME}-${BUILD_NUMBER}
+  namespace: jenkins
+spec:
+  containers:
+  - name: maven
+    image: maven:3.8.4-openjdk-11
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+    - name: maven-repo
+      mountPath: /root/.m2
+      
+  - name: docker
+    image: docker:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+      
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command:
+    - cat
+    tty: true
+    
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+  - name: maven-repo
+    emptyDir: {}
+  
+  serviceAccountName: jenkins
+"""
+        }
+    }
+    
+    environment {
+        DOCKER_REGISTRY = 'docker.io'
+        DOCKER_USERNAME = credentials('docker-username')
+        DOCKER_PASSWORD = credentials('docker-password')
+    }
+    
+    stages {
+        stage('Build') {
+            steps {
+                container('maven') {
+                    sh 'mvn clean compile'
+                }
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                container('maven') {
+                    sh 'mvn test'
+                }
+            }
+            post {
+                always {
+                    publishTestResults testResultsPattern: '**/target/surefire-reports/*.xml'
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                container('maven') {
+                    sh 'mvn package -DskipTests'
+                }
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                container('docker') {
+                    script {
+                        sh '''
+                            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD $DOCKER_REGISTRY
+                            docker build -t ${DOCKER_REGISTRY}/myapp:${BUILD_NUMBER} .
+                            docker push ${DOCKER_REGISTRY}/myapp:${BUILD_NUMBER}
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy') {
+            steps {
+                container('kubectl') {
+                    script {
+                        sh '''
+                            kubectl set image deployment/myapp myapp=${DOCKER_REGISTRY}/myapp:${BUILD_NUMBER}
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}

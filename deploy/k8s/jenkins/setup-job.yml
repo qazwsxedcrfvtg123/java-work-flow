@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: jenkins-setup
+  namespace: jenkins
+spec:
+  template:
+    spec:
+      containers:
+      - name: jenkins-setup
+        image: jenkins/jenkins:lts-jdk11
+        command:
+        - sh
+        - -c
+        - |
+          # Install plugins
+          cp /tmp/plugins.txt /var/jenkins_home/plugins.txt
+          cd /usr/share/jenkins/ref/
+          while read plugin; do
+            if [ ! -z "$plugin" ] && [[ ! $plugin =~ ^# ]]; then
+              echo "Installing plugin: $plugin"
+              install-plugins.sh $plugin
+            fi
+          done < /var/jenkins_home/plugins.txt
+          
+          # Configure Jenkins
+          cat > /var/jenkins_home/init.groovy.d/basic-settings.groovy << 'EOF'
+          import jenkins.model.*
+          import hudson.security.*
+          import jenkins.security.s2m.AdminWhitelistRule
+          
+          def instance = Jenkins.getInstance()
+          
+          // Disable CLI over Remoting
+          instance.getDescriptor("jenkins.CLI").get().setEnabled(false)
+          
+          // Disable usage statistics
+          instance.setNoUsageStatistics(true)
+          
+          // Set system message
+          instance.setSystemMessage("Kubernetes Kafka Workflow System CI/CD")
+          
+          // Save configuration
+          instance.save()
+          EOF
+        volumeMounts:
+        - name: jenkins-home
+          mountPath: /var/jenkins_home
+        - name: plugins-config
+          mountPath: /tmp/plugins.txt
+          subPath: plugins.txt
+      restartPolicy: OnFailure
+      volumes:
+      - name: jenkins-home
+        persistentVolumeClaim:
+          claimName: jenkins-pvc
+      - name: plugins-config
+        configMap:
+          name: jenkins-plugins

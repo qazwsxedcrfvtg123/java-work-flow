@@ -1,0 +1,108 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-agent-config
+  namespace: jenkins
+data:
+  Dockerfile: |
+    FROM jenkins/inbound-agent:jdk11
+    
+    USER root
+    
+    # Install Docker CLI
+    RUN apt-get update && \
+        apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release && \
+        curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+        apt-get update && \
+        apt-get install -y docker-ce-cli && \
+        rm -rf /var/lib/apt/lists/*
+    
+    # Install kubectl
+    RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+        install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    
+    # Install Helm
+    RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    
+    # Install Maven
+    ENV MAVEN_VERSION=3.8.4
+    ENV MAVEN_HOME=/opt/maven
+    RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/$MAVEN_VERSION/binaries/apache-maven-$MAVEN_VERSION-bin.tar.gz | tar xzf - -C /opt/ && \
+        ln -s /opt/apache-maven-$MAVEN_VERSION /opt/maven && \
+        ln -s /opt/maven/bin/mvn /usr/bin/mvn
+    
+    # Install additional tools
+    RUN apt-get update && \
+        apt-get install -y git openssh-client zip unzip jq && \
+        rm -rf /var/lib/apt/lists/*
+    
+    USER jenkins
+    
+  jenkins-agent.yml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: jenkins-agent-${JOB_NAME}-${BUILD_NUMBER}
+      namespace: jenkins
+    spec:
+      containers:
+      - name: jnlp
+        image: jenkins/inbound-agent:jdk11
+        args: ['$(JENKINS_SECRET)', '$(JENKINS_NAME)']
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        - name: kube-config
+          mountPath: /home/jenkins/.kube/
+          readOnly: true
+        
+      - name: maven
+        image: maven:3.8.4-openjdk-11
+        command:
+        - cat
+        tty: true
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        - name: kube-config
+          mountPath: /root/.kube/
+          readOnly: true
+        - name: maven-repo
+          mountPath: /root/.m2
+        
+      - name: docker
+        image: docker:latest
+        command:
+        - cat
+        tty: true
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        - name: docker-config
+          mountPath: /root/.docker/
+        
+      - name: kubectl
+        image: bitnami/kubectl:latest
+        command:
+        - cat
+        tty: true
+        volumeMounts:
+        - name: kube-config
+          mountPath: /root/.kube/
+          readOnly: true
+        
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: kube-config
+        configMap:
+          name: kubeconfig
+      - name: docker-config
+        secret:
+          secretName: docker-config
+      - name: maven-repo
+        emptyDir: {}
+      
+      serviceAccountName: jenkins

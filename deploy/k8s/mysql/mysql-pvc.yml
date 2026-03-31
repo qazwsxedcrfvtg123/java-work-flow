@@ -1,0 +1,2 @@
+# This PVC is created as part of the StatefulSet volumeClaimTemplates
+# This file is included for completeness but typically not needed separately

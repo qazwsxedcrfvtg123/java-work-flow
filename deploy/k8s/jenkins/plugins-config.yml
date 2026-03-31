@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jenkins-plugins
+  namespace: jenkins
+data:
+  plugins.txt: |
+    # Essential Plugins
+    kubernetes:latest
+    workflow-aggregator:latest
+    git:latest
+    github:latest
+    pipeline-stage-view:latest
+    blueocean:latest
+    
+    # Docker Integration
+    docker-workflow:latest
+    docker-plugin:latest
+    
+    # Quality & Security
+    checkstyle:latest
+    pmd:latest
+    findbugs:latest
+    dependency-check-jenkins-plugin:latest
+    sonar:latest
+    
+    # Notifications
+    slack:latest
+    email-ext:latest
+    
+    # Utilities
+    ansicolor:latest
+    build-timeout:latest
+    timestamper:latest
+    ws-cleanup:latest
+    
+    # Kubernetes Specific
+    kubernetes-cli:latest
+    kubernetes-cd:latest
+    
+    # Testing
+    junit:latest
+    cobertura:latest
+    jacoco:latest
+    
+    # SCM
+    git-parameter:latest
+    github-branch-source:latest

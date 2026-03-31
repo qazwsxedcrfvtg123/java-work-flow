@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: workflow-ingress
+  namespace: workflow-system
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  rules:
+  - host: workflow.local
+    http:
+      paths:
+      - path: /api/workflow(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: workflow-service
+            port:
+              number: 8081
+      - path: /api/notification(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: notification-service
+            port:
+              number: 8082
+  - http:
+      paths:
+      - path: /api/workflow(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: workflow-service
+            port:
+              number: 8081
+      - path: /api/notification(/|$)(.*)
+        pathType: Prefix
+        backend:
+          service:
+            name: notification-service
+            port:
+              number: 8082
