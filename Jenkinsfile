@@ -22,23 +22,22 @@ pipeline {
         }
 
         stage('2. Build Java Services') {
-                    steps {
-                        echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
-                        script {
-                            // 1. 用 curl 抓標準無污染的 3.8.6 版本
-                            sh 'curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o apache-maven-3.8.6-bin.tar.gz'
-                            // 2. 解壓縮
-                            sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
+                     steps {
+                         echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
+                         script {
+                             sh 'curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o apache-maven-3.8.6-bin.tar.gz'
+                             sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
 
-                            echo '🟢 Maven 下載解壓成功！開始執行全模組編譯打包...'
-                            // 關鍵修改：直接對根目錄進行全局 clean package，去掉限制的 -pl 參數，徹底解決 Parent 找不到的難題 🟢
-                            dir('java-k8s-kafka-workflow-system') {
-                                                    // 導航進去後，呼叫上一層解壓出來的 maven 執行全域安裝
-                                                    sh '../apache-maven-3.8.6/bin/mvn clean install -DskipTests'
-                                                }
-                        }
-                    }
-                }
+                             echo '🔍 [偵探模式] 開始列印工作區的完整檔案結構...'
+                             // -R 代表遞迴，連子資料夾裡面的東西都一併吐出來 🟢
+                             sh 'ls -R'
+
+                             echo '🟢 開始嘗試最安全的當前路徑編譯...'
+                             // 我們暫時先退回最原始的路徑，看看它列印出來的結構是什麼
+                             sh './apache-maven-3.8.6/bin/mvn clean install -DskipTests || echo "编译失败，等待查看结构"'
+                         }
+                     }
+                 }
 
         stage('3. Docker Build Local') {
             parallel {
