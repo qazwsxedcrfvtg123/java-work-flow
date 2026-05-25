@@ -73,5 +73,18 @@ services:
       MYSQL_HOST: mysql:3306
     restart: on-failure
 
+  auth-service:
+    build: ../../auth-module
+    ports:
+      - "8083:8083"
+    depends_on:
+      - kafka
+      - mysql
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      KAFKA_HOST: kafka:9092
+      MYSQL_HOST: mysql:3306
+    restart: on-failure
+
 volumes:
   mysql_data:

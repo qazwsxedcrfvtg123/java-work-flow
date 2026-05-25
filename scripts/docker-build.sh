@@ -39,6 +39,14 @@ if [ ! -f "target/notification-service-*.jar" ]; then
 fi
 docker build -t notification-service:latest .
 
+# Build Auth Service image
+echo "Building Auth Service image..."
+cd ../auth-module
+if [ ! -f "target/auth-module-*.jar" ]; then
+    ../../mvnw clean package -DskipTests
+fi
+docker build -t auth-service:latest .
+
 echo "All Docker images built successfully!"
 
 # Return to original directory
