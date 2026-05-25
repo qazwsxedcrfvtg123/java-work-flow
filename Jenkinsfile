@@ -32,7 +32,10 @@ pipeline {
 
                             echo '🟢 Maven 下載解壓成功！開始執行全模組編譯打包...'
                             // 關鍵修改：直接對根目錄進行全局 clean package，去掉限制的 -pl 參數，徹底解決 Parent 找不到的難題 🟢
-                            sh './apache-maven-3.8.6/bin/mvn clean package -DskipTests'
+                            dir('java-k8s-kafka-workflow-system') {
+                                                    // 導航進去後，呼叫上一層解壓出來的 maven 執行全域安裝
+                                                    sh '../apache-maven-3.8.6/bin/mvn clean install -DskipTests'
+                                                }
                         }
                     }
                 }
