@@ -1,11 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'Maven 3.8.4'
-        jdk 'OpenJDK 11'
-    }
-
     environment {
         // Docker 基礎設定（假設你在 Jenkins 建立了一個 Username/Password 類型的凭证，ID 為 docker-credentials）
         DOCKER_CREDS = credentials('docker-credentials')
@@ -46,15 +41,15 @@ pipeline {
 
         stage('2. Code Quality Check') {
             parallel {
-                stage('Checkstyle') { steps { sh 'mvn checkstyle:check || echo "Checkstyle failed but continue"' } }
-                stage('SpotBugs') { steps { sh 'mvn spotbugs:check || echo "SpotBugs failed but continue"' } }
-                stage('PMD') { steps { sh 'mvn pmd:check || echo "PMD failed but continue"' } }
+                stage('Checkstyle') { steps { sh './mvnw checkstyle:check || echo "Checkstyle failed but continue"' } }
+                stage('SpotBugs') { steps { sh './mvnw spotbugs:check || echo "SpotBugs failed but continue"' } }
+                stage('PMD') { steps { sh './mvnw pmd:check || echo "PMD failed but continue"' } }
             }
         }
 
         stage('3. Unit Tests') {
             steps {
-                sh 'mvn test'
+                sh './mvnw test'
             }
             post {
                 always {
@@ -68,13 +63,13 @@ pipeline {
         stage('4. Build Java Services') {
             steps {
                 echo '📦 開始進行多模組編譯打包...'
-                sh 'mvn clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
+                sh './mvnw clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
             }
         }
 
         stage('5. Security Scan') {
             steps {
-                sh 'mvn dependency-check:check || echo "Security risks found, check reports"'
+                sh './mvnw dependency-check:check || echo "Security risks found, check reports"'
             }
         }
 
