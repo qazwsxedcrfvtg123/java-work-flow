@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        // 純本地模式：直接把鏡像名稱定義好即可，不需要登入憑證 🟢
+        // 純本地模式：鏡像名稱定義，不需要登入 credentials 🟢
         IMAGE_NAME_PREFIX = "workflow-local"
-        EC2_DEPLOY_PATH = '/opt/workflow-system'
     }
 
     stages {
@@ -12,11 +11,9 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    // 自動取得 Git 版本號，如果沒有標籤就用簡短的 Commit ID
                     env.APP_VERSION = sh(script: "git describe --tags --always 2>/dev/null || git rev-parse --short HEAD", returnStdout: true).trim()
-
                     echo "============================================="
-                    echo "🚀 本地模式航空母艦點火！"
+                    echo "🚀 本地極速模式：航母點火成功！"
                     echo "Build Number: ${env.BUILD_NUMBER}"
                     echo "Application Version: ${env.APP_VERSION}"
                     echo "============================================="
@@ -26,9 +23,17 @@ pipeline {
 
         stage('2. Build Java Services') {
             steps {
-                echo '📦 正在使用內建 Maven Wrapper 進行打包...'
-                sh 'chmod +x ./mvnw'
-                sh './mvnw clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
+                echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
+                script {
+                    // 現場從 Apache 官方抓一個標準無污染的 3.8.6 版本
+                    sh 'wget -q https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz'
+                    // 解壓縮到當前工作區
+                    sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
+
+                    echo '🟢 Maven 下載解壓成功！開始執行多模組編譯打包...'
+                    // 關鍵：直接用解壓出來的獨立 Maven 絕對路徑來編譯，徹底繞過 mvnw 缺件地獄！
+                    sh './apache-maven-3.8.6/bin/mvn clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
+                }
             }
         }
 
@@ -77,7 +82,6 @@ pipeline {
                 script {
                     echo "🚚 正在本地生成 docker-compose-deploy.yml ..."
 
-                    // 這裡的 image 欄位全部改用我們剛剛在本地做好的 workflow-local/...
                     writeFile file: 'docker-compose-deploy.yml', text: """
 version: '3.8'
 services:
@@ -159,8 +163,7 @@ networks:
   workflow-network:
     driver: bridge
 """
-
-                    echo "=== 拔除所有登入邏輯，直接本機啟動微服務群 ==="
+                    echo "=== 執行 docker-compose 滾動重啟服務 ==="
                     sh "docker-compose -f docker-compose-deploy.yml down || true"
                     sh "docker-compose -f docker-compose-deploy.yml up -d"
 
@@ -174,11 +177,10 @@ networks:
         always {
             script {
                 try {
-                    // 清理垃圾，只留下最新打包好和正在運行的鏡像
                     sh 'docker image prune -f || true'
                     cleanWs()
                 } catch (Exception e) {
-                    echo "清理工作區跳過: ${e.message}"
+                    echo "清理工作區被跳過: ${e.message}"
                 }
             }
         }
