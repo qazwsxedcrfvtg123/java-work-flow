@@ -22,57 +22,25 @@ pipeline {
         }
 
         stage('2. Build Java Services') {
-            steps {
-                echo '📦 [優化方案] 啟動智慧快取與阿里雲鏡像加速機制...'
-                script {
-                    sh '''
-                    if [ ! -f /tmp/apache-maven-3.8.6-bin.tar.gz ]; then
-                        curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o /tmp/apache-maven-3.8.6-bin.tar.gz
-                    fi
-                    tar -xzf /tmp/apache-maven-3.8.6-bin.tar.gz
-                    '''
+                    steps {
+                        script {
+                            echo '📦 準備執行強制的 Reactor 編譯...'
 
-                    // 🟢 修正了 activeProfile 的 XML 語法錯誤
-                    sh '''
-                    cat << 'EOF' > ./apache-maven-3.8.6/conf/settings.xml
-<?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
-  <localRepository>/var/jenkins_home/.m2/repository</localRepository>
-  <mirrors>
-    <mirror>
-        <id>aliyunmaven</id>
-        <mirrorOf>central</mirrorOf>
-        <name>aliyun maven</name>
-        <url>https://maven.aliyun.com/repository/public</url>
-    </mirror>
-  </mirrors>
-  <profiles>
-    <profile>
-      <id>downloadProfiles</id>
-      <repositories>
-        <repository>
-          <id>aliyunmaven-repo</id>
-          <url>https://maven.aliyun.com/repository/public</url>
-          <releases><enabled>true</enabled></releases>
-          <snapshots><enabled>false</enabled></snapshots>
-        </repository>
-      </repositories>
-    </profile>
-  </profiles>
-  <activeProfiles>
-    <activeProfile>downloadProfiles</activeProfile>
-  </activeProfiles>
-</settings>
-EOF
-                    '''
+                            // 1. 下載 Maven (與之前一樣)
+                            sh '''
+                            if [ ! -f /tmp/apache-maven-3.8.6-bin.tar.gz ]; then
+                                curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o /tmp/apache-maven-3.8.6-bin.tar.gz
+                            fi
+                            tar -xzf /tmp/apache-maven-3.8.6-bin.tar.gz
+                            '''
 
-                    echo '🟢 開始執行全模組編譯安裝...'
-                    sh './apache-maven-3.8.6/bin/mvn clean install -DskipTests'
+                            // 2. 核心突破：直接在工作區根目錄使用 -f 指定 pom.xml 進行 Reactor 安裝
+                            // 只要在根目錄執行 install，Maven 會自動根據 <modules> 結構把所有子專案依賴全部補齊
+                            echo '🟢 執行全域 Reactor install，讓 Maven 自己理清父子關係...'
+                            sh './apache-maven-3.8.6/bin/mvn clean install -DskipTests -f pom.xml'
+                        }
+                    }
                 }
-            }
-        }
 
         stage('3. Docker Build Local') {
             parallel {
