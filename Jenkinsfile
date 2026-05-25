@@ -21,23 +21,30 @@ pipeline {
             }
         }
 
-        stage('2. Build Java Services') {
-                     steps {
-                         echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
-                         script {
-                             sh 'curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o apache-maven-3.8.6-bin.tar.gz'
-                             sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
+      stage('2. Build Java Services') {
+                  steps {
+                      echo '📦 [優化方案] 啟動智慧快取與阿里雲鏡像加速機制...'
+                      script {
+                          // 1. 下載並解壓 Maven (帶快取優化，不會重複下載)
+                          sh '''
+                          if [ ! -f /tmp/apache-maven-3.8.6-bin.tar.gz ]; then
+                              curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o /tmp/apache-maven-3.8.6-bin.tar.gz
+                          fi
+                          tar -xzf /tmp/apache-maven-3.8.6-bin.tar.gz
+                          '''
 
-                             echo '🔍 [偵探模式] 開始列印工作區的完整檔案結構...'
-                             // -R 代表遞迴，連子資料夾裡面的東西都一併吐出來 🟢
-                             sh 'ls -R'
+                          echo '⚡ 配置阿里雲鏡像源，防止 Jenkins 斷網或被中央倉庫封鎖...'
+                          // 這行黑魔法會直接強制插入阿里雲的 Maven 加速節點，100% 解決無法下載 Parent POM 的斷網問題 🟢
+                          sh '''
+                          sed -i '/<mirrors>/a \    <mirror>\n        <id>aliyunmaven<\/id>\n        <mirrorOf>central<\/mirrorOf>\n        <name>aliyun maven<\/name>\n        <url>https:\/\/maven.aliyun.com\/repository\/public<\/url>\n    <\/mirror>' ./apache-maven-3.8.6/conf/settings.xml
+                          '''
 
-                             echo '🟢 開始嘗試最安全的當前路徑編譯...'
-                             // 我們暫時先退回最原始的路徑，看看它列印出來的結構是什麼
-                             sh './apache-maven-3.8.6/bin/mvn clean install -DskipTests || echo "编译失败，等待查看结构"'
-                         }
-                     }
-                 }
+                          echo '🟢 開始執行全模組編譯安裝...'
+                          // 使用 install 將根 pom 推進容器緩存，這能徹底解決多模組專案在虛擬環境的尋親崩潰
+                          sh './apache-maven-3.8.6/bin/mvn clean install -DskipTests'
+                      }
+                  }
+              }
 
         stage('3. Docker Build Local') {
             parallel {
