@@ -25,14 +25,14 @@ pipeline {
                     steps {
                         echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
                         script {
-                            // 改用 curl 下載！-L 代表跟隨重導向，-s 代表安靜模式，-o 代表輸出的檔名 🟢
+                            // 1. 用 curl 抓標準無污染的 3.8.6 版本
                             sh 'curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o apache-maven-3.8.6-bin.tar.gz'
-
-                            // 解壓縮到當前工作區
+                            // 2. 解壓縮
                             sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
 
-                            echo '🟢 Maven 下載解壓成功！開始執行多模組編譯打包...'
-                            sh './apache-maven-3.8.6/bin/mvn clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
+                            echo '🟢 Maven 下載解壓成功！開始執行全模組編譯打包...'
+                            // 關鍵修改：直接對根目錄進行全局 clean package，去掉限制的 -pl 參數，徹底解決 Parent 找不到的難題 🟢
+                            sh './apache-maven-3.8.6/bin/mvn clean package -DskipTests'
                         }
                     }
                 }
