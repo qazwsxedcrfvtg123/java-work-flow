@@ -8,7 +8,7 @@
         <groupId>com.demo</groupId>
         <artifactId>java-k8s-kafka-workflow-system</artifactId>
         <version>1.0.0-SNAPSHOT</version>
-        <relativePath></relativePath>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>notification-service</artifactId>
