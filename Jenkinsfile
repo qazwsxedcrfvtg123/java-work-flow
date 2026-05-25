@@ -22,20 +22,20 @@ pipeline {
         }
 
         stage('2. Build Java Services') {
-            steps {
-                echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
-                script {
-                    // 現場從 Apache 官方抓一個標準無污染的 3.8.6 版本
-                    sh 'wget -q https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz'
-                    // 解壓縮到當前工作區
-                    sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
+                    steps {
+                        echo '📦 [方案B] 啟動 Jenkins 內部動態下載 Maven 機制...'
+                        script {
+                            // 改用 curl 下載！-L 代表跟隨重導向，-s 代表安靜模式，-o 代表輸出的檔名 🟢
+                            sh 'curl -Lfs https://archive.apache.org/dist/maven/maven-3/3.8.6/binaries/apache-maven-3.8.6-bin.tar.gz -o apache-maven-3.8.6-bin.tar.gz'
 
-                    echo '🟢 Maven 下載解壓成功！開始執行多模組編譯打包...'
-                    // 關鍵：直接用解壓出來的獨立 Maven 絕對路徑來編譯，徹底繞過 mvnw 缺件地獄！
-                    sh './apache-maven-3.8.6/bin/mvn clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
+                            // 解壓縮到當前工作區
+                            sh 'tar -xzf apache-maven-3.8.6-bin.tar.gz'
+
+                            echo '🟢 Maven 下載解壓成功！開始執行多模組編譯打包...'
+                            sh './apache-maven-3.8.6/bin/mvn clean package -DskipTests -pl auth-module,services/api-gateway,services/workflow-service,services/notification-service -am'
+                        }
+                    }
                 }
-            }
-        }
 
         stage('3. Docker Build Local') {
             parallel {
