@@ -1,10 +1,10 @@
 package com.demo.auth.controller;
 
-import com.demo.auth.dto.AuthRequest;
-import com.demo.auth.dto.AuthResponse;
+import com.demo.auth.dto.*;
 import com.demo.auth.filter.JwtAuthenticationFilter;
 import com.demo.auth.model.Role;
 import com.demo.auth.service.AuthService;
+import com.demo.auth.service.PasswordResetService;
 import com.demo.auth.util.JwtUtil;
 import com.demo.auth.config.JwtTokenProvider;
 import com.demo.auth.repository.UserRepository;
@@ -34,17 +34,19 @@ public class AuthController {
     public static final String AUTHORIZATION = "Authorization";
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtUtil jwtUtil;
     private final JwtTokenProvider jwtTokenProvider;  // 新增
     private final UserRepository userRepository;      // 新增
 
     public AuthController(AuthService authService,
-                         JwtAuthenticationFilter jwtAuthenticationFilter,
-                         JwtUtil jwtUtil,
-                         JwtTokenProvider jwtTokenProvider,  // 新增
-                         UserRepository userRepository) {      // 新增
+                          PasswordResetService passwordResetService, JwtAuthenticationFilter jwtAuthenticationFilter,
+                          JwtUtil jwtUtil,
+                          JwtTokenProvider jwtTokenProvider,  // 新增
+                          UserRepository userRepository) {      // 新增
         this.authService = authService;
+        this.passwordResetService = passwordResetService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.jwtUtil = jwtUtil;
         this.jwtTokenProvider = jwtTokenProvider;  // 新增
@@ -231,6 +233,62 @@ public class AuthController {
         response.put("username", username);
 
         return ResponseEntity.ok(response);
+    }
+
+    // 修改密碼 (需帶 JWT Token)
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(
+        @RequestHeader("Authorization") String token,
+        @RequestBody Map<String, String> body
+    ) {
+
+        String oldPassword = body.get("oldPassword");
+        String newPassword = body.get("newPassword");
+
+        // 1. 驗證請求參數
+        if (oldPassword == null || oldPassword.isBlank()
+            || newPassword == null || newPassword.isBlank()) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("message", "舊密碼與新密碼不可為空"));
+        }
+
+        // 2. 不允許新舊密碼相同
+        if (oldPassword.equals(newPassword)) {
+            return ResponseEntity.badRequest()
+                .body(Map.of("message", "新密碼不可與舊密碼相同"));
+        }
+
+        // 3. 呼叫 Service 驗證舊密碼並更新
+        authService.changePassword(token, oldPassword, newPassword);
+
+        // 4. 回傳成功訊息
+        return ResponseEntity.ok(
+            Map.of("message", "更新密碼成功")
+        );
+    }
+
+    //忘記密碼 重設三部曲
+
+    // 1. 忘記密碼：送驗證碼
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody @Valid ForgotPasswordRequest req) {
+        passwordResetService.sendResetCode(req.getEmail());
+        // 安全：不管信箱是否存在都回同一訊息，避免被列舉帳號
+        return ResponseEntity.ok(Map.of("message", "若該信箱已註冊，我們將寄送重設密碼的驗證碼"));
+    }
+
+    // 2. 驗碼（可選）
+    @PostMapping("/verify-code")
+    public ResponseEntity<?> verifyCode(@RequestBody @Valid VerifyCodeRequest req) {
+        passwordResetService.verifyCode(req.getEmail(), req.getCode());
+        return ResponseEntity.ok(Map.of("message", "驗證成功"));
+    }
+
+    // 3. 重設密碼
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody @Valid ResetPasswordRequest req) {
+        passwordResetService.resetPassword(req.getEmail(), req.getCode(), req.getNewPassword());
+        return ResponseEntity.ok(Map.of("message", "密碼已重設，請使用新密碼登入"));
     }
 
     /**

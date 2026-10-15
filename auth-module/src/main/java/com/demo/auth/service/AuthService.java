@@ -21,6 +21,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,15 +39,18 @@ public class AuthService implements UserDetailsService {
     private final JwtUtil jwtUtil;
     private final JwtTokenProvider jwtTokenProvider;  // 新增
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public AuthService(@Lazy AuthenticationManager authenticationManager, 
-                      JwtUtil jwtUtil, 
+    public AuthService(@Lazy AuthenticationManager authenticationManager,
+                      JwtUtil jwtUtil,
                       JwtTokenProvider jwtTokenProvider,  // 新增
-                      UserRepository userRepository) {
+                      UserRepository userRepository,
+                       PasswordEncoder passwordEncoder) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.jwtTokenProvider = jwtTokenProvider;  // 新增
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
         initializeDefaultUsers();
     }
 
@@ -55,7 +59,7 @@ public class AuthService implements UserDetailsService {
      */
     private void initializeDefaultUsers() {
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-        
+
         // Create admin user if not exists
         if (!userRepository.existsByUsername("admin")) {
             UserEntity adminUser = UserEntity.builder()
@@ -101,14 +105,14 @@ public class AuthService implements UserDetailsService {
 
         UserEntity user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + request.getUsername()));
-        
+
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("role", user.getRole().name());
-        
+
         // 生成 Access Token（30 分钟）
         String token = jwtUtil.generateToken(user.getUsername(), claims);
-        
+
         // 生成 Refresh Token（7 天）- 新增
         String refreshToken = jwtTokenProvider.generateRefreshToken(
             new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
@@ -116,9 +120,9 @@ public class AuthService implements UserDetailsService {
                 Collections.singletonList(new SimpleGrantedAuthority(user.getRole().name()))
             )
         );
-        
+
         long refreshExpiresIn = jwtTokenProvider.getRefreshExpiration();
-        
+
         return AuthResponse.builder()
                 .token(token)
                 .refreshToken(refreshToken)  // 新增
@@ -138,7 +142,7 @@ public class AuthService implements UserDetailsService {
         }
 
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-        
+
         UserEntity newUser = UserEntity.builder()
                 .username(username)
                 .password(passwordEncoder.encode(password))
@@ -176,5 +180,50 @@ public class AuthService implements UserDetailsService {
      */
     public Optional<UserEntity> getUserByUsername(String username) {
         return userRepository.findByUsername(username);
+    }
+
+    @Transactional
+    public void changePassword(String token, String oldPassword, String newPassword) {
+
+        // 1. 從 token 取出 username（跟你的 JwtAuthenticationFilter 同一套邏輯）
+        String rawToken = stripBearer(token);
+        String username = jwtUtil.extractUsername(rawToken);   // Subject
+        if (username == null || username.isBlank()) {
+            throw new RuntimeException("token 無效或已過期");
+        }
+
+        // 2. 驗舊密碼 —— 跟你 authenticate() 一模一樣的寫法
+        try {
+            authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(username, oldPassword)
+            );
+        } catch (DisabledException e) {
+            log.error("User is disabled: {}", username);
+            throw new RuntimeException("帳號已停用");
+        } catch (BadCredentialsException e) {
+            log.error("Invalid credentials for user: {}", username);
+            throw new RuntimeException("原密碼錯誤");
+        }
+
+        // 3. 查用戶 —— 跟你 authenticate() 一模一樣的寫法
+        UserEntity user = userRepository.findByUsername(username)
+            .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+
+        // 4. 防呆：BCrypt 每次 hash 都不同，必須用 matches
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new RuntimeException("新密碼不可與舊密碼相同");
+        }
+
+        // 5. 存新密碼
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+
+        log.info("change password success: username={}", username);
+    }
+
+    private String stripBearer(String token) {
+        if (token == null) return null;
+        String t = token.trim();
+        return t.toLowerCase().startsWith("bearer ") ? t.substring(7) : t;
     }
 }
