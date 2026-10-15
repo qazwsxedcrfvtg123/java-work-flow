@@ -34,3 +34,5 @@
 
 - 使用Docker Compose进行本地部署
 - 使用Kubernetes进行生产部署
+
+目前只用 auth-module
