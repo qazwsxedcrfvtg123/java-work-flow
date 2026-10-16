@@ -4,14 +4,16 @@ import com.demo.auth.entity.UserEntity;
 import com.demo.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.security.SecureRandom;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -26,7 +28,12 @@ public class PasswordResetService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate redisTemplate;
-//    private final JavaMailSender mailSender;
+
+    @Autowired(required = false)
+    private JavaMailSender mailSender;
+
+    @Value("${spring.mail.from:qazwsxedcrfvtg123@gmail.com}")
+    private String mailFrom;
 
     private static final String KEY_PREFIX = "pwd:reset:";
     private static final long CODE_TTL_MINUTES = 15;
@@ -53,7 +60,8 @@ public class PasswordResetService {
         redisTemplate.opsForValue().set(KEY_PREFIX + "attempts:" + user.getId(), "0",
             CODE_TTL_MINUTES, TimeUnit.MINUTES);
 
-        sendMail(user.getEmail(), code);
+        // 非同步寄信，避免 SMTP 延遲卡死前端 HTTP 請求
+        CompletableFuture.runAsync(() -> sendMail(user.getEmail(), code));
         log.info("reset code generated for userId={}, code={}（上線後刪除此行）", user.getId(), code);
     }
 
@@ -132,10 +140,20 @@ public class PasswordResetService {
     }
 
     private void sendMail(String to, String code) {
-        SimpleMailMessage msg = new SimpleMailMessage();
-        msg.setTo(to);
-        msg.setSubject("【photography-uu】重設密碼驗證碼");
-        msg.setText("您的驗證碼為：" + code + "\n有效時間 15 分鐘，請勿提供給他人。");
-        //mailSender.send(msg);// todo 還沒成功
+        if (mailSender == null) {
+            log.warn("JavaMailSender 未配置，略過實際寄信（驗證碼為: {}）", code);
+            return;
+        }
+        try {
+            SimpleMailMessage msg = new SimpleMailMessage();
+            msg.setFrom("Photography-UU 系統通知 <" + mailFrom + ">");
+            msg.setTo(to);
+            msg.setSubject("【photography-uu】重設密碼驗證碼");
+            msg.setText("您的驗證碼為：" + code + "\n有效時間 15 分鐘，請勿提供給他人。");
+            mailSender.send(msg);
+            log.info("密碼重設驗證碼已發送至: {}", to);
+        } catch (Exception e) {
+            log.error("寄送驗證碼郵件失敗: {}", e.getMessage(), e);
+        }
     }
 }
